@@ -1,0 +1,286 @@
+---
+title: "Project"
+author: "Jiayi"
+date: "17/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Set up
+```{r}
+rm(list =ls())
+setwd('~/Desktop/STA_426_UZH/Project/')
+load("DF.RData")
+```
+
+UpSetR
+```{r}
+library(UpSetR)
+thd = 0.01
+DF_01 = data.frame(eisaR = ifelse(DF$eisaR < thd, 1, 0), 
+                   BRIE2 = ifelse(DF$BRIE2 < thd, 1, 0),
+                   DEXSeq_USA = ifelse(DF$DEXSeq_USA < thd, 1, 0))
+upset(DF_01)
+```
+
+top 100 genes from each method, in every cell-type
+```{r}
+cell_types = unique(DF$Cell_type); cell_types
+TOP_100 = list()
+
+xx = 100
+
+for(i in 1:length(cell_types)){
+  cell = cell_types[i]
+  
+  tmp = DF[DF$Cell_type == cell,]
+  
+  # check top 100 genes from each method:
+  TOP_100[[i]] = data.frame(Cell_type = cell,
+                            eisaR = (tmp$Gene_id[order(tmp$eisaR)])[1:xx],
+                            BRIE2 = tmp$Gene_id[order(tmp$BRIE2)][1:xx],
+                            DEXSeq_USA = tmp$Gene_id[order(tmp$DEXSeq_USA)][1:xx])
+}
+TOP_100 = do.call(rbind, TOP_100)
+
+# top 100 genes from each method, in every cell-type
+head(TOP_100)
+
+all_genes = unique(unlist(TOP_100[,-1]))
+length(all_genes)
+head(all_genes)
+```
+
+
+```{r}
+CPNs_top_100 <- TOP_100[TOP_100$Cell_type=='CPNs',]
+Cycling_top_100 <- TOP_100[TOP_100$Cell_type=='Cycling',]
+oRG_top_100 <- TOP_100[TOP_100$Cell_type=='oRG',]
+RG_top_100 <- TOP_100[TOP_100$Cell_type=='RG',]
+
+```
+
+Gene ontology on CPNs with esiaR method
+
+```{r message=FALSE}
+# CPNs
+library(topGO)
+library(org.Hs.eg.db)
+CPNs_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$eisaR & DF$Cell_type == 'CPNs', ]
+geneList <- CPNs_pvalue$eisaR
+names(geneList) <- CPNs_pvalue$Gene_id
+
+topDiffGenes <- function(allScore) {
+  return(allScore < 0.01)
+}
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in CPNs (esiaR')
+
+```
+
+Gene ontology on CPNs with BRIE2 method
+
+```{r message = F}
+CPNs_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$BRIE2 & DF$Cell_type == 'CPNs', ]
+geneList <- CPNs_pvalue$BRIE2
+names(geneList) <- CPNs_pvalue$Gene_id
+
+topDiffGenes <- function(allScore) {
+  return(allScore < 0.01)
+}
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in CPNs (BRIE2)')
+```
+
+Gene ontology on CPNs with DEXSeq_USA method
+
+```{r message = F}
+CPNs_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$DEXSeq_USA & DF$Cell_type == 'CPNs', ]
+geneList <- CPNs_pvalue$DEXSeq_USA
+names(geneList) <- CPNs_pvalue$Gene_id
+
+topDiffGenes <- function(allScore) {
+  return(allScore < 0.01)
+}
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in CPNs (DEXSeq_USA)')
+```
+
+Gene ontology on Cycling with eisaR
+
+```{r message=F}
+Cycling_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$eisaR & DF$Cell_type == 'Cycling', ]
+geneList <- Cycling_pvalue$eisaR
+names(geneList) <- Cycling_pvalue$Gene_id
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in Cycling (eisaR)')
+```
+
+Gene ontology on Cycling with BRIE2
+
+```{r message=F}
+Cycling_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$BRIE2 & DF$Cell_type == 'Cycling', ]
+geneList <- Cycling_pvalue$BRIE2
+names(geneList) <- Cycling_pvalue$Gene_id
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in Cycling (BRIE2)')
+```
+
+Gene ontology on Cycling with DEXSeq_USA
+
+```{r message = F}
+Cycling_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$DEXSeq_USA & DF$Cell_type == 'Cycling', ]
+geneList <- Cycling_pvalue$DEXSeq_USA
+names(geneList) <- Cycling_pvalue$Gene_id
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in Cycling (DEXSeq_USA)')
+```
+
+GO analysis on oRG with esiaR
+
+```{r message=F}
+oRG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$eisaR & DF$Cell_type == 'oRG', ]
+geneList <- oRG_pvalue$eisaR
+names(geneList) <- oRG_pvalue$Gene_id
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in oRG (eisaR)')
+```
+
+GO analysis on oRG with BRIE2
+
+```{r message=F}
+oRG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$BRIE2 & DF$Cell_type == 'oRG', ]
+geneList <- oRG_pvalue$BRIE2
+names(geneList) <- oRG_pvalue$Gene_id
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in oRG (BRIE2)')
+```
+
+GO analysis on oRG with DEXSeq_USA
+
+```{r message = F}
+oRG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$DEXSeq_USA & DF$Cell_type == 'oRG', ]
+geneList <- oRG_pvalue$DEXSeq_USA
+names(geneList) <- oRG_pvalue$Gene_id
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in oRG (DEXSeq_USA)')
+```
+
+GO analysis on RG with eisaR
+
+```{r message = F}
+RG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$eisaR & DF$Cell_type == 'RG', ]
+geneList <- RG_pvalue$eisaR
+names(geneList) <- RG_pvalue$Gene_id
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in RG (eisaR)')
+```
+
+GO analysis on RG with BRIE2
+
+```{r message = F}
+RG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$BRIE2 & DF$Cell_type == 'RG', ]
+geneList <- RG_pvalue$BRIE2
+names(geneList) <- RG_pvalue$Gene_id
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in RG (BRIE2)')
+```
+
+GO analysis on RG with DEXSeq_USA
+
+```{r messgae = F}
+RG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$DEXSeq_USA & DF$Cell_type == 'RG', ]
+geneList <- RG_pvalue$DEXSeq_USA
+names(geneList) <- RG_pvalue$Gene_id
+
+topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
+
+gs <- geneScore(topGO, use.names = TRUE)
+sig_gene <- sigGenes(topGO)
+sig_gene
+resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
+pvalFis <- score(resultFis)
+hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in RG (DEXSeq_USA)')
+```
+
+

@@ -60,7 +60,6 @@ CPNs_top_100 <- TOP_100[TOP_100$Cell_type=='CPNs',]
 Cycling_top_100 <- TOP_100[TOP_100$Cell_type=='Cycling',]
 oRG_top_100 <- TOP_100[TOP_100$Cell_type=='oRG',]
 RG_top_100 <- TOP_100[TOP_100$Cell_type=='RG',]
-
 ```
 
 Gene ontology on CPNs with esiaR method
@@ -281,6 +280,42 @@ sig_gene
 resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
 pvalFis <- score(resultFis)
 hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in RG (DEXSeq_USA)')
+```
+
+Check top100 gene redundancy 
+
+```{r}
+CPNs_top_100 <- TOP_100[TOP_100$Cell_type=='CPNs',]
+Cycling_top_100 <- TOP_100[TOP_100$Cell_type=='Cycling',]
+oRG_top_100 <- TOP_100[TOP_100$Cell_type=='oRG',]
+RG_top_100 <- TOP_100[TOP_100$Cell_type=='RG',]
+
+gene_redudancy <- data.frame(matrix(ncol = 4))
+colnames(gene_redudancy) <- c('GeneID','eisaR','BRIE2', 'DEXSeq_USA')
+for(i in 1:length(all_genes)){
+  gene_redudancy[i,'GeneID'] = all_genes[i]
+  if( all_genes[i] %in% TOP_100$eisaR){
+    gene_redudancy[i,'eisaR'] = 1
+  }else{
+    gene_redudancy[i,'eisaR'] = 0
+  }
+  
+  if( all_genes[i] %in% TOP_100$BRIE2){
+    gene_redudancy[i,'BRIE2'] = 1
+  }else{
+    gene_redudancy[i,'BRIE2'] = 0
+  }
+  
+  if( all_genes[i] %in% TOP_100$DEXSeq_USA){
+    gene_redudancy[i,'DEXSeq_USA'] = 1
+  }else{
+    gene_redudancy[i,'DEXSeq_USA'] = 0
+  }
+}
+
+gene_redudancy$Sum <- rowSums(gene_redudancy[,2:4])
+hist(gene_redudancy$Sum, main = 'Top 100 gene redudancy', xlab = 'Number of methods', ylab = 'Number of genes')
+
 ```
 
 

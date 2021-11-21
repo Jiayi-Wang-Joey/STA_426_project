@@ -24,6 +24,7 @@ DF_01 = data.frame(eisaR = ifelse(DF$eisaR < thd, 1, 0),
                    BRIE2 = ifelse(DF$BRIE2 < thd, 1, 0),
                    DEXSeq_USA = ifelse(DF$DEXSeq_USA < thd, 1, 0))
 upset(DF_01)
+
 ```
 
 top 100 genes from each method, in every cell-type
@@ -56,265 +57,137 @@ head(all_genes)
 
 
 ```{r}
-CPNs_top_100 <- TOP_100[TOP_100$Cell_type=='CPNs',]
-Cycling_top_100 <- TOP_100[TOP_100$Cell_type=='Cycling',]
-oRG_top_100 <- TOP_100[TOP_100$Cell_type=='oRG',]
-RG_top_100 <- TOP_100[TOP_100$Cell_type=='RG',]
-```
-
-Gene ontology on CPNs with esiaR method
-
-```{r message=FALSE}
-# CPNs
+# define GO analysis functions
 library(topGO)
 library(org.Hs.eg.db)
-CPNs_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$eisaR & DF$Cell_type == 'CPNs', ]
-geneList <- CPNs_pvalue$eisaR
-names(geneList) <- CPNs_pvalue$Gene_id
+
+GO_analysis_count = function(DE_genes) {
+    xx <- annFUN.org("BP", feasibleGenes = DE_genes, mapping = "org.Hs.eg.db", ID ="Ensembl")
+    allGenes <- unique(unlist(xx))
+    myInterestedGenes <- sample(allGenes, length(allGenes)/10)
+    geneList <- factor(as.integer(allGenes %in% myInterestedGenes))
+    names(geneList) <- allGenes
+    
+    GOdata <- new("topGOdata",
+              ontology = "BP",
+              allGenes = geneList,
+              nodeSize = 5,
+              annot = annFUN.org, 
+              mapping = "org.Hs.eg.db",
+              ID = "Ensembl") 
+    test.stat <- new("classicCount", testStatistic = GOFisherTest, name = "Fisher test")
+    resultFisher <- getSigGroups(GOdata, test.stat)
+    GO_score <- score(resultFisher)
+    
+    return(GO_score)
+}
 
 topDiffGenes <- function(allScore) {
   return(allScore < 0.01)
 }
 
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
-
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in CPNs (esiaR')
-
-```
-
-Gene ontology on CPNs with BRIE2 method
-
-```{r message = F}
-CPNs_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$BRIE2 & DF$Cell_type == 'CPNs', ]
-geneList <- CPNs_pvalue$BRIE2
-names(geneList) <- CPNs_pvalue$Gene_id
-
-topDiffGenes <- function(allScore) {
-  return(allScore < 0.01)
+GO_analysis_score = function(score_genes) {
+    geneList <- score_genes
+    
+    GOdata <- new("topGOdata", 
+                  ontology= "BP", 
+                  allGenes = geneList, 
+                  nodeSize = 5, 
+                  geneSelectionFun = topDiffGenes, 
+                  annot=annFUN.org, 
+                  mapping="org.Hs.eg.db", 
+                  ID = "Ensembl")
+    
+    test.stat <- new("classicScore", testStatistic = GOKSTest, name = "KS tests")
+    resultKS <- getSigGroups(GOdata, test.stat)
+    GO_score <- score(resultKS)
+    return(GO_score)
 }
 
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
 
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in CPNs (BRIE2)')
 ```
 
-Gene ontology on CPNs with DEXSeq_USA method
+Gene ontology enrichment analysis
 
-```{r message = F}
-CPNs_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$DEXSeq_USA & DF$Cell_type == 'CPNs', ]
-geneList <- CPNs_pvalue$DEXSeq_USA
-names(geneList) <- CPNs_pvalue$Gene_id
+```{r message=FALSE}
+methods = c("eisaR", "BRIE2", "DEXSeq_USA")
+GO_term_count <- list()
+GO_term_score <- list()
 
-topDiffGenes <- function(allScore) {
-  return(allScore < 0.01)
+# loop over cell type:
+for(i in 1:length(cell_types)){
+  cell = cell_types[i]
+  
+  TOP_100_cell = TOP_100[TOP_100$Cell_type==cell,]
+  DF_cell = DF[DF$Cell_type==cell, ]
+  
+  # loop over methods:
+  for(j in 1:length(methods)){
+    method = methods[j]
+
+    # list of all analyzed genes:
+    all_genes = DF_cell$Gene_id
+    
+    if(TRUE){ # GO based on the list of 100 top genes
+      # list of 100 differential genes:
+      DE_genes = TOP_100_cell[, colnames(TOP_100_cell) == method] # thd defined at the beginning (0.01 or 0.05)
+      GO_score <- GO_analysis_count(DE_genes)
+      name = paste0(cell,'_',method)
+      GO_term_count[[name]] = names(GO_score[GO_score < 0.05])
+    }else{ # GO based on ranking from all results:
+      #FDR = DF_cell[, colnames(DF) == method]
+      # gene ranking (1 = most significant gene)
+      #rank_genes = order(FDR)
+      score_genes <- DF_cell[, colnames(DF) == method]
+      names(score_genes) <- DF_cell$Gene_id
+      name = paste0(cell,'_',method)
+      GO_score <- GO_analysis_score(score_genes)
+      GO_term_score[[name]] = names(GO_score[GO_score < 0.05])
+    }
+  }
 }
 
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
-
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in CPNs (DEXSeq_USA)')
 ```
 
-Gene ontology on Cycling with eisaR
-
-```{r message=F}
-Cycling_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$eisaR & DF$Cell_type == 'Cycling', ]
-geneList <- Cycling_pvalue$eisaR
-names(geneList) <- Cycling_pvalue$Gene_id
-
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
-
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in Cycling (eisaR)')
-```
-
-Gene ontology on Cycling with BRIE2
-
-```{r message=F}
-Cycling_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$BRIE2 & DF$Cell_type == 'Cycling', ]
-geneList <- Cycling_pvalue$BRIE2
-names(geneList) <- Cycling_pvalue$Gene_id
-
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
-
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in Cycling (BRIE2)')
-```
-
-Gene ontology on Cycling with DEXSeq_USA
-
-```{r message = F}
-Cycling_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$DEXSeq_USA & DF$Cell_type == 'Cycling', ]
-geneList <- Cycling_pvalue$DEXSeq_USA
-names(geneList) <- Cycling_pvalue$Gene_id
-
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
-
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in Cycling (DEXSeq_USA)')
-```
-
-GO analysis on oRG with esiaR
-
-```{r message=F}
-oRG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$eisaR & DF$Cell_type == 'oRG', ]
-geneList <- oRG_pvalue$eisaR
-names(geneList) <- oRG_pvalue$Gene_id
-
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
-
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in oRG (eisaR)')
-```
-
-GO analysis on oRG with BRIE2
-
-```{r message=F}
-oRG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$BRIE2 & DF$Cell_type == 'oRG', ]
-geneList <- oRG_pvalue$BRIE2
-names(geneList) <- oRG_pvalue$Gene_id
-
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
-
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in oRG (BRIE2)')
-```
-
-GO analysis on oRG with DEXSeq_USA
-
-```{r message = F}
-oRG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$DEXSeq_USA & DF$Cell_type == 'oRG', ]
-geneList <- oRG_pvalue$DEXSeq_USA
-names(geneList) <- oRG_pvalue$Gene_id
-
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
-
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in oRG (DEXSeq_USA)')
-```
-
-GO analysis on RG with eisaR
-
-```{r message = F}
-RG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$eisaR & DF$Cell_type == 'RG', ]
-geneList <- RG_pvalue$eisaR
-names(geneList) <- RG_pvalue$Gene_id
-
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
-
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in RG (eisaR)')
-```
-
-GO analysis on RG with BRIE2
-
-```{r message = F}
-RG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$BRIE2 & DF$Cell_type == 'RG', ]
-geneList <- RG_pvalue$BRIE2
-names(geneList) <- RG_pvalue$Gene_id
-
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
-
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in RG (BRIE2)')
-```
-
-GO analysis on RG with DEXSeq_USA
-
-```{r messgae = F}
-RG_pvalue <- DF[DF$Gene_id %in% CPNs_top_100$DEXSeq_USA & DF$Cell_type == 'RG', ]
-geneList <- RG_pvalue$DEXSeq_USA
-names(geneList) <- RG_pvalue$Gene_id
-
-topGO <- new("topGOdata", ontology= "BP", allGenes = geneList, nodeSize = 10, geneSelectionFun = topDiffGenes, annot=annFUN.org, mapping="org.Hs.eg.db", ID = "Ensembl")
-
-gs <- geneScore(topGO, use.names = TRUE)
-sig_gene <- sigGenes(topGO)
-sig_gene
-resultFis <- runTest(topGO, algorithm = "classic", statistic = "fisher")
-pvalFis <- score(resultFis)
-hist(pvalFis, 50, xlab = "p-values", main = 'Histogram of topGO results in RG (DEXSeq_USA)')
-```
-
-Check top100 gene redundancy 
+Gene level analysis
 
 ```{r}
-CPNs_top_100 <- TOP_100[TOP_100$Cell_type=='CPNs',]
-Cycling_top_100 <- TOP_100[TOP_100$Cell_type=='Cycling',]
-oRG_top_100 <- TOP_100[TOP_100$Cell_type=='oRG',]
-RG_top_100 <- TOP_100[TOP_100$Cell_type=='RG',]
+library('rjson')
+development <- fromJSON(file='development.json')
+development_brain <- fromJSON(file='development_brain.json')
+brain <- fromJSON(file='brain.json')
 
-gene_redudancy <- data.frame(matrix(ncol = 4))
-colnames(gene_redudancy) <- c('GeneID','eisaR','BRIE2', 'DEXSeq_USA')
-for(i in 1:length(all_genes)){
-  gene_redudancy[i,'GeneID'] = all_genes[i]
-  if( all_genes[i] %in% TOP_100$eisaR){
-    gene_redudancy[i,'eisaR'] = 1
-  }else{
-    gene_redudancy[i,'eisaR'] = 0
-  }
-  
-  if( all_genes[i] %in% TOP_100$BRIE2){
-    gene_redudancy[i,'BRIE2'] = 1
-  }else{
-    gene_redudancy[i,'BRIE2'] = 0
-  }
-  
-  if( all_genes[i] %in% TOP_100$DEXSeq_USA){
-    gene_redudancy[i,'DEXSeq_USA'] = 1
-  }else{
-    gene_redudancy[i,'DEXSeq_USA'] = 0
-  }
+development_genes <- c()
+development_brain_genes <- c()
+brain_genes <- c()
+for(i in 1:length(development)){
+  development_genes <- append(development_genes,development[[i]][[1]])
 }
 
-gene_redudancy$Sum <- rowSums(gene_redudancy[,2:4])
-hist(gene_redudancy$Sum, main = 'Top 100 gene redudancy', xlab = 'Number of methods', ylab = 'Number of genes')
+for(i in 1:length(development_brain)){
+  development_brain_genes <- append(development_brain_genes,development_brain[[i]][[1]])
+}
+
+for(i in 1:length(brain)){
+  brain_genes <- append(brain_genes,brain[[i]][[1]])
+}
+
+top_100_in_development <- list()
+top_100_in_development_brain <- list()
+top_100_in_brain <- list()
+
+for(i in 1:length(cell_types)){
+  cell = cell_types[i]
+  TOP_100_cell = TOP_100[TOP_100$Cell_type==cell,]
+  for(j in 1:length(methods)){
+    method = methods[j]
+    DE_genes = TOP_100_cell[, colnames(TOP_100_cell) == method]
+    name = paste0(cell,'_',method)
+    top_100_in_development[[name]] = DE_genes[DE_genes %in% development_genes]
+    top_100_in_development_brain[[name]] = DE_genes[DE_genes %in% development_brain_genes]
+    top_100_in_brain[[name]] = DE_genes[DE_genes %in% brain_genes]
+  }
+}
 
 ```
 
